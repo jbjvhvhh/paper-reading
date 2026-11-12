@@ -1,0 +1,81 @@
+name: build site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/**'
+      - 'build/**'
+      - '.github/workflows/build.yml'
+  schedule:
+    # 每月 1 日 03:00 UTC；仅在设置了仓库变量 ACL_XML_URL 时才会拉到新数据
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install lxml
+
+      # 可选：仓库 Settings → Variables 里设置 ACL_XML_URL 指向新的 Anthology XML。
+      # 未设置时跳过，只用仓库内已有数据。
+      - name: Fetch upstream XML (optional)
+        if: ${{ vars.ACL_XML_URL != '' }}
+        continue-on-error: true
+        run: |
+          curl -fsSL "${{ vars.ACL_XML_URL }}" -o /tmp/anthology.xml
+          python build/update.py --xml /tmp/anthology.xml --no-build
+
+      - name: Build site
+        run: python build/build_site.py
+
+      - name: Verify site
+        run: python build/verify_site.py
+
+      - name: Commit rebuilt files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html data/papers.json
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            git commit -m "build: regenerate index.html [skip ci]"
+            git push
+          fi
+
+      - name: Stage artifact
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

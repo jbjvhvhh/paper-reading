@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 生成的中间文件
+*.tmp
+.check.js
+data/pending.md
+
+# 本地排版/预览
+.preview/
+.dsh-office-*/
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 原始 XML（体积大，不入库；见 data/source.md）
+*.acl.xml
